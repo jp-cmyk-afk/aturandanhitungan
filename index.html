@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Petualangan Hak & Kewajiban Kelas 2 SD (Multiplayer)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Press+Start+2P&display=swap');
+        
+        body {
+            font-family: 'Fredoka', sans-serif;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .font-pixel {
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(12px);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+        }
+
+        body { min-height: 100svh; overflow-y: auto !important; }
+        .game-hud { flex-wrap: wrap; gap: 8px; }
+        .game-frame { flex-shrink: 0; aspect-ratio: auto; height: clamp(520px, 78svh, 900px); }
+        @media (max-width: 639px) {
+            .game-frame { height: max(540px, 74svh); }
+        }
+        #overlay-start, #overlay-end { justify-content: safe center; }
+        .touch-btn { touch-action: none; min-width: 0; }
+        @media (max-width: 639px) {
+            body { justify-content: flex-start !important; }
+            .game-hud > div { gap: 4px; }
+            .game-hud > div > div { padding: 6px; margin-left: 0; }
+            .game-hud .font-pixel { font-size: 10px; }
+            #overlay-start, #overlay-end { padding: 12px; }
+            #overlay-start h1 { font-size: 15px; line-height: 1.5; }
+            #overlay-start > div:first-child { display: none; }
+            #btn-jump { font-size: 12px; padding: 8px; }
+        }
+        @media (pointer: coarse) {
+            .mobile-controls { display: grid !important; }
+            #jump-hint, .keyboard-hint { display: none !important; }
+        }
+
+        canvas {
+            image-rendering: auto;
+        }
+
+        .touch-btn {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(6px);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+        }
+
+        .touch-btn:active {
+            background: rgba(245, 158, 11, 0.5);
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.05); opacity: 1; }
+        }
+        .pulse-glow {
+            animation: pulseGlow 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen overflow-hidden flex flex-col items-center justify-center p-2 md:p-4">
+
+    <!-- Game Container Wrapper -->
+    <div class="relative w-full max-w-6xl flex flex-col items-center">
+        
+        <!-- Top HUD Bar -->
+        <div class="game-hud w-full glass-panel rounded-2xl p-2.5 sm:p-3 mb-2 flex items-center justify-between text-xs sm:text-sm font-semibold shadow-2xl border border-slate-700/60">
+            <!-- Left: Score, Chests & Online Players Count -->
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <div class="flex items-center space-x-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-amber-500/30">
+                    <i class="fa-solid fa-trophy text-amber-400 text-sm"></i>
+                    <span>SKOR: <span id="hud-score" class="text-amber-400 font-bold font-pixel">0</span></span>
+                </div>
+                <div class="flex items-center space-x-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-emerald-500/30">
+                    <i class="fa-solid fa-box-open text-emerald-400 text-sm"></i>
+                    <span>PETI: <span id="hud-chests" class="text-emerald-400 font-bold font-pixel">0/40</span></span>
+                </div>
+                <div class="flex items-center space-x-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-indigo-500/30">
+                    <i class="fa-solid fa-users text-indigo-400 text-sm"></i>
+                    <span>PEMAIN ONLINE: <span id="hud-online" class="text-indigo-400 font-bold font-pixel">0</span></span>
+                </div>
+            </div>
+            
+            <!-- Right: Timer & Restart -->
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <div class="flex items-center space-x-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-cyan-500/30">
+                    <i class="fa-solid fa-stopwatch text-cyan-400 text-sm"></i>
+                    <span id="hud-timer" class="text-cyan-400 font-bold font-pixel">00:00</span>
+                </div>
+                <button id="btn-restart" class="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded-xl transition-all shadow-md active:scale-95 text-xs font-bold flex items-center gap-1" title="Restart Game">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span class="hidden sm:inline">Reset</span>
+                </button>
+            </div>
+        </div>
+
+        <p id="multiplayer-status" role="status" class="w-full text-xs text-slate-300 mb-2">Masukkan nama lalu mulai untuk bergabung bersama pemain lain.</p>
+
+        <!-- Main Canvas Frame -->
+        <div class="game-frame relative w-full bg-slate-900 rounded-2xl overflow-hidden border-2 border-slate-700 shadow-2xl flex items-center justify-center">
+            <canvas id="gameCanvas" class="w-full h-full block"></canvas>
+
+            <!-- Locked Warning Banner -->
+            <div id="lock-warning" class="hidden absolute top-4 left-1/2 -translate-x-1/2 bg-amber-500 text-slate-950 font-extrabold text-xs sm:text-sm px-5 py-2.5 rounded-full shadow-2xl border-2 border-amber-300 flex items-center space-x-2 animate-bounce z-10">
+                <i class="fa-solid fa-lock text-base"></i>
+                <span>Jawab kuis untuk membuka kunci pergerakan!</span>
+            </div>
+
+            <!-- Jump Button Prompt Hint (Floating UI) -->
+            <div id="jump-hint" class="hidden sm:block absolute top-4 right-4 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700 text-[11px] text-amber-300 font-semibold shadow-lg z-10">
+                Tekan <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-white font-bold">SPACE</kbd> untuk Loncat! 🦘
+            </div>
+
+            <!-- Start Game Screen Overlay -->
+            <div id="overlay-start" class="absolute inset-0 glass-panel flex flex-col items-center justify-center p-6 text-center z-20 overflow-y-auto">
+                <div class="w-16 h-16 sm:w-20 sm:h-20 bg-amber-500/40 rounded-3xl flex items-center justify-center mb-3 border-2 border-amber-400/40 pulse-glow">
+                    <i class="fa-solid fa-earth-asia text-amber-400 text-3xl sm:text-4xl"></i>
+                </div>
+                <h1 class="text-xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-orange-400 to-yellow-300 mb-1 font-pixel">PETUALANGAN MULTIPLAYER</h1>
+                <p class="text-amber-200/90 text-xs sm:text-sm max-w-lg mb-4 leading-relaxed font-medium">
+                    Jelajahi peta luas berdanau indah bersama teman-temanmu secara live! Temukan <span class="text-amber-400 font-bold">40 Peti Harta Karun</span> & jawab kuis PKN serta matematika Kelas 2 SD. Makin cepat selesai, makin besar skor akhirnya!
+                </p>
+                <p class="text-xs text-cyan-200 max-w-lg mb-3">Skor akhir = skor jawaban × 600 ÷ (600 + waktu dalam detik). Waktu termasuk saat menjawab. Contoh: 10 menit mendapat 50% skor jawaban. Tidak ada batas waktu.</p>
+                
+                <div class="space-y-3 w-full max-w-xs">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-300 mb-1 text-left">Nama Pemain:</label>
+                        <input type="text" id="player-name-input" placeholder="Ketik nama kamu..." maxlength="12" class="w-full px-4 py-2.5 bg-slate-900 border-2 border-slate-700 rounded-xl text-center text-white focus:outline-none focus:border-amber-400 font-bold transition-all text-sm placeholder:text-slate-500">
+                    </div>
+
+                    <!-- Character Color Selector -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-300 mb-1.5 text-left">Pilih Warna Karakter:</label>
+                        <div class="flex items-center justify-center space-x-3" id="color-picker-group">
+                            <button data-color="#2563eb" class="w-8 h-8 rounded-full bg-blue-600 border-2 border-white scale-110 shadow-md ring-2 ring-amber-400"></button>
+                            <button data-color="#dc2626" class="w-8 h-8 rounded-full bg-red-600 border-2 border-white shadow-md"></button>
+                            <button data-color="#16a34a" class="w-8 h-8 rounded-full bg-green-600 border-2 border-white shadow-md"></button>
+                            <button data-color="#9333ea" class="w-8 h-8 rounded-full bg-purple-600 border-2 border-white shadow-md"></button>
+                            <button data-color="#ea580c" class="w-8 h-8 rounded-full bg-orange-600 border-2 border-white shadow-md"></button>
+                        </div>
+                    </div>
+
+                    <button id="btn-start" class="w-full py-3.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-base rounded-xl shadow-xl shadow-orange-500/40 transition-all transform active:scale-95 flex items-center justify-center space-x-2">
+                        <span>MASUK KE MAP</span>
+                        <i class="fa-solid fa-gamepad"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Game Over / Victory Overlay -->
+            <div id="overlay-end" class="hidden absolute inset-0 glass-panel flex flex-col items-center justify-center p-6 text-center z-30">
+                <h2 id="end-title" class="text-xl sm:text-3xl font-black text-amber-400 mb-1 font-pixel">SELAMAT! PETUALANGAN SELESAI!</h2>
+                <p class="text-slate-300 text-xs sm:text-sm mb-3">Kamu telah menemukan semua 40 peti harta karun!</p>
+                
+                <!-- Final Stats -->
+                <div class="grid grid-cols-2 gap-3 w-full max-w-xs mb-3">
+                    <div class="bg-slate-900/90 border border-slate-700 p-2.5 rounded-xl">
+                        <div class="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Total Skor</div>
+                        <div id="end-score" class="text-lg sm:text-xl font-black text-amber-400 font-pixel">0</div>
+                    </div>
+                    <div class="bg-slate-900/90 border border-slate-700 p-2.5 rounded-xl">
+                        <div class="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Total Waktu</div>
+                        <div id="end-time" class="text-lg sm:text-xl font-black text-cyan-400 font-pixel">00:00</div>
+                    </div>
+                </div>
+
+                <p id="end-breakdown" class="text-xs text-slate-300 max-w-sm mb-3"></p>
+
+                <!-- Leaderboard Container -->
+                <div class="w-full max-w-sm bg-slate-900/90 border border-slate-800 rounded-xl p-3 mb-3 text-left">
+                    <div class="text-xs font-bold text-slate-300 mb-2 flex items-center justify-between px-1">
+                        <span><i class="fa-solid fa-ranking-star text-amber-400 mr-1.5"></i>PAPAN SKOR MULTIPLAYER LIVE</span>
+                        <span class="text-amber-400">TOP 5</span>
+                    </div>
+                    <div id="leaderboard-list" class="space-y-1 text-xs max-h-36 overflow-y-auto">
+                        <!-- Dynamic Leaderboard Content -->
+                    </div>
+                </div>
+
+                <button id="btn-play-again" class="w-full max-w-xs py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>MAIN LAGI</span>
+                </button>
+            </div>
+
+            <!-- Quiz Modal Popup -->
+            <div id="quiz-modal" class="hidden absolute inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-40">
+                <div class="glass-panel border-2 border-amber-400/60 rounded-2xl w-full max-w-lg p-5 sm:p-6 text-left shadow-2xl relative">
+                    <!-- Quiz Header -->
+                    <div class="flex items-center justify-between mb-4 border-b border-slate-700 pb-3">
+                        <span class="text-xs font-extrabold px-3 py-1 bg-amber-500/40 text-amber-300 rounded-lg border border-amber-500/40 flex items-center gap-1.5">
+                            <i class="fa-solid fa-book-open"></i> KUIS KELAS 2 SD
+                        </span>
+                        <span id="quiz-reward" class="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/30">+100 Poin</span>
+                    </div>
+
+                    <!-- Question Text -->
+                    <h3 id="quiz-question" class="text-sm sm:text-base font-bold text-slate-100 mb-4 leading-relaxed">
+                        Pertanyaan kuis...
+                    </h3>
+
+                    <!-- Choices List -->
+                    <div id="quiz-options" class="space-y-2.5 mb-4">
+                        <!-- Dynamic Buttons -->
+                    </div>
+
+                    <!-- Quiz Feedback Message -->
+                    <div id="quiz-feedback" class="hidden p-3 rounded-xl text-center text-xs font-bold"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Virtual Touch Controls (Mobile Only) -->
+        <div class="mobile-controls w-full mt-2 grid grid-cols-4 gap-2 sm:hidden px-4 max-w-sm">
+            <div></div>
+            <button id="btn-up" class="touch-btn p-3.5 rounded-2xl flex items-center justify-center text-xl text-amber-400 active:scale-95">
+                <i class="fa-solid fa-arrow-up"></i>
+            </button>
+            <div></div>
+            <!-- Jump Button for Touch Screens -->
+            <button id="btn-jump" class="touch-btn p-3.5 rounded-2xl flex items-center justify-center text-lg font-extrabold text-amber-300 bg-amber-500/40 active:scale-95 border-amber-400/50">
+                <i class="fa-solid fa-angles-up mr-1"></i> LONCAT
+            </button>
+
+            <button id="btn-left" class="touch-btn p-3.5 rounded-2xl flex items-center justify-center text-xl text-amber-400 active:scale-95">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <button id="btn-down" class="touch-btn p-3.5 rounded-2xl flex items-center justify-center text-xl text-amber-400 active:scale-95">
+                <i class="fa-solid fa-arrow-down"></i>
+            </button>
+            <button id="btn-right" class="touch-btn p-3.5 rounded-2xl flex items-center justify-center text-xl text-amber-400 active:scale-95">
+                <i class="fa-solid fa-arrow-right"></i>
+            </button>
+            <div></div>
+        </div>
+
+        <!-- PC Keyboard Controls Hint -->
+        <div class="keyboard-hint hidden sm:flex items-center justify-center space-x-6 mt-2 text-xs text-slate-400">
+            <span class="flex items-center gap-1.5"><kbd class="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-200">W A S D</kbd> / <kbd class="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-200">Panah Keyboard</kbd> : Bergerak</span>
+            <span class="flex items-center gap-1.5"><kbd class="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-200">SPACEBAR</kbd> : Loncat</span>
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-compass text-amber-400"></i> Mini-map ada di kanan bawah</span>
+        </div>
+    </div>
+
+    <!-- Game Script -->
+    <script type="module">
+        // Shared multiplayer presence is synchronized through the site API.
+        const playerSession = crypto.randomUUID();
+        let multiplayerTimer = null;
+        let multiplayerActive = false;
+        let multiplayerBusy = false;
+        let lastMultiplayerSuccess = 0;
+
+        // Sound Effects (Web Audio API)
+        const AudioFX = {
+            ctx: null,
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            },
+            playTone(freq, type, duration, gainVal = 0.1) {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e) {}
+            },
+            jump() {
+                this.init();
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(450, this.ctx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.15);
+                } catch(e) {}
+            },
+            chestOpen() {
+                this.init();
+                this.playTone(350, 'sine', 0.1);
+                setTimeout(() => this.playTone(550, 'sine', 0.15), 90);
+            },
+            correct() {
+                this.init();
+                this.playTone(523.25, 'triangle', 0.1);
+                setTimeout(() => this.playTone(659.25, 'triangle', 0.1), 100);
+                setTimeout(() => this.playTone(783.99, 'triangle', 0.25), 200);
+            },
+            wrong() {
+                this.init();
+                this.playTone(220, 'sawtooth', 0.15);
+                setTimeout(() => this.playTone(170, 'sawtooth', 0.25), 140);
+            },
+            victory() {
+                this.init();
+                [523, 659, 783, 1046].forEach((freq, idx) => {
+                    setTimeout(() => this.playTone(freq, 'sine', 0.2), idx * 110);
+                });
+            }
+        };
+
+        // 20 soal PKN + 20 soal matematika kelas 2 SD
+        const QUESTION_BANK = [
+            { q: "Merapikan tempat tidur sendiri setelah bangun adalah contoh...", options: ["Aturan di rumah", "Aturan di jalan raya", "Aturan di rumah sakit"], answer: 0, points: 100 },
+            { q: "Mendapatkan kasih sayang dan rasa aman dari orang tua adalah...", options: ["Kewajiban anak", "Hak anak", "Hukuman anak"], answer: 1, points: 100 },
+            { q: "Sebelum masuk ke rumah orang lain, kita sebaiknya...", options: ["Langsung masuk", "Mengucapkan salam / mengetuk pintu", "Bicara keras-keras"], answer: 1, points: 100 },
+            { q: "Mendengarkan penjelasan guru saat pelajaran di kelas adalah...", options: ["Kewajiban siswa", "Hak siswa", "Larangan di sekolah"], answer: 0, points: 100 },
+            { q: "Mendapatkan ilmu pelajaran dan nilai dari guru adalah contoh...", options: ["Kewajiban murid", "Hak murid", "Aturan rumah"], answer: 1, points: 100 },
+            { q: "Apa yang terjadi jika kita tidak mematuhi aturan di sekolah?", options: ["Dipuji guru", "Suasana menjadi tidak tertib", "Mendapat hadiah"], answer: 1, points: 100 },
+            { q: "Membantu ibu mencuci piring setelah makan merupakan...", options: ["Kewajiban di rumah", "Hak anak di rumah", "Aturan jalan raya"], answer: 0, points: 100 },
+            { q: "Menggunakan fasilitas perpustakaan sekolah dengan baik adalah...", options: ["Hak siswa", "Kewajiban orang tua", "Siksaan"], answer: 0, points: 100 },
+            { q: "Ketika ingin berbicara saat guru mengajar, kita sebaiknya...", options: ["Berteriak", "Mengangkat tangan terlebih dahulu", "Menyela bicara guru"], answer: 1, points: 100 },
+            { q: "Membuang sampah pada tempatnya di sekolah adalah kewajiban...", options: ["Semua warga sekolah", "Penjaga sekolah saja", "Kepala sekolah saja"], answer: 0, points: 100 },
+            { q: "Hak yang didapatkan anak ketika sakit di rumah adalah...", options: ["Disuruh bekerja", "Dirawat dan diberi obat oleh orang tua", "Dibiarkan sendiri"], answer: 1, points: 100 },
+            { q: "Menjaga kebersihan dan kerapian kamar sendiri adalah...", options: ["Hak anak", "Kewajiban anak", "Hak orang tua"], answer: 1, points: 100 },
+            { q: "Contoh tata tertib saat pelaksanaan upacara bendera adalah...", options: ["Berdiri tegak dan khidmat", "Bicara dengan teman", "Bercanda dan tertawa"], answer: 0, points: 100 },
+            { q: "Sesuatu yang harus kita lakukan dengan penuh tanggung jawab disebut...", options: ["Hak", "Kewajiban", "Hadiah"], answer: 1, points: 100 },
+            { q: "Sesuatu yang layak kita terima setelah melaksanakan kewajiban disebut...", options: ["Aturan", "Hukuman", "Hak"], answer: 2, points: 100 },
+            { q: "Belajar dengan rajin dan tekun merupakan kewajiban seorang...", options: ["Pelajar / Murid", "Guru", "Satpam"], answer: 0, points: 100 },
+            { q: "Jika kita mematuhi semua aturan di rumah, suasana rumah akan...", options: ["Rukun dan damai", "Berantakan", "Penuh pertengkaran"], answer: 0, points: 100 },
+            { q: "Mengembalikan buku ke tempatnya setelah dibaca adalah...", options: ["Aturan di perpustakaan", "Aturan di kantin", "Hak siswa"], answer: 0, points: 100 },
+            { q: "Sebelum makan di rumah, aturan yang baik adalah...", options: ["Mencuci tangan dan berdoa", "Langsung tidur", "Bermain HP"], answer: 0, points: 100 },
+            { q: "Mendapat lingkungan sekolah yang bersih dan nyaman adalah...", options: ["Hak seluruh siswa", "Kewajiban orang tua", "Larangan guru"], answer: 0, points: 100 },
+            {"q": "23 + 15 = ...", "options": ["38", "35", "48"], "answer": 0, "points": 100},
+            {"q": "36 + 22 = ...", "options": ["48", "58", "68"], "answer": 1, "points": 100},
+            {"q": "47 + 18 = ...", "options": ["55", "75", "65"], "answer": 2, "points": 100},
+            {"q": "28 + 34 = ...", "options": ["62", "52", "64"], "answer": 0, "points": 100},
+            {"q": "56 + 17 = ...", "options": ["63", "73", "83"], "answer": 1, "points": 100},
+            {"q": "Rani punya 24 kelereng. Ia mendapat 16 lagi. Berapa jumlahnya?", "options": ["30", "36", "40"], "answer": 2, "points": 100},
+            {"q": "Di rak ada 35 buku. Ditambah 27 buku. Sekarang ada ... buku.", "options": ["62", "52", "72"], "answer": 0, "points": 100},
+            {"q": "48 - 16 = ...", "options": ["22", "32", "34"], "answer": 1, "points": 100},
+            {"q": "65 - 23 = ...", "options": ["42", "32", "44"], "answer": 0, "points": 100},
+            {"q": "52 - 28 = ...", "options": ["34", "26", "24"], "answer": 2, "points": 100},
+            {"q": "80 - 35 = ...", "options": ["55", "45", "35"], "answer": 1, "points": 100},
+            {"q": "73 - 19 = ...", "options": ["54", "64", "56"], "answer": 0, "points": 100},
+            {"q": "Bima punya 46 stiker. Ia memberi 18 kepada temannya. Sisanya ... stiker.", "options": ["38", "26", "28"], "answer": 2, "points": 100},
+            {"q": "Ada 60 jeruk. Sebanyak 24 jeruk terjual. Berapa sisanya?", "options": ["34", "36", "46"], "answer": 1, "points": 100},
+            {"q": "Lanjutkan pola: 2, 4, 6, 8, ...", "options": ["10", "11", "12"], "answer": 0, "points": 100},
+            {"q": "Lanjutkan pola: 5, 10, 15, 20, ...", "options": ["24", "30", "25"], "answer": 2, "points": 100},
+            {"q": "Lanjutkan pola: 10, 20, 30, 40, ...", "options": ["45", "50", "60"], "answer": 1, "points": 100},
+            {"q": "Lanjutkan pola: 30, 27, 24, 21, ...", "options": ["18", "20", "17"], "answer": 0, "points": 100},
+            {"q": "Angka yang hilang: 12, 16, ..., 24, 28.", "options": ["18", "22", "20"], "answer": 2, "points": 100},
+            {"q": "Lanjutkan pola: 50, 45, 40, 35, ...", "options": ["25", "30", "32"], "answer": 1, "points": 100}
+        ];
+
+        // --- MAP CONFIGURATION (SANGAT LUAS: 4800 x 3600) ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const MAP_WIDTH = 4800;
+        const MAP_HEIGHT = 3600;
+        const TILE_SIZE = 50;
+
+        let gameRunning = false;
+        let isLocked = false;
+        let activeChest = null;
+        let score = 0;
+        let answerScore = 0;
+        let startTime = 0;
+        let elapsedTime = 0;
+        let timerInterval = null;
+
+        // Player Info
+        let myUserId = null;
+        let playerName = "Teman Kecil";
+        let playerColor = "#2563eb";
+
+        // Multiplayer Remote Players Object
+        let remotePlayers = {};
+
+        // Camera System
+        const camera = {
+            x: 0,
+            y: 0,
+            viewportWidth: 800,
+            viewportHeight: 600,
+            zoom: 1.35
+        };
+
+        const keys = { Up: false, Down: false, Left: false, Right: false };
+
+        const localPlayer = {
+            x: MAP_WIDTH / 2,
+            y: MAP_HEIGHT / 2,
+            width: 32,
+            height: 38,
+            speed: 5.8,
+            dirX: 0,
+            dirY: 1,
+            animTimer: 0,
+            animFrame: 0,
+            // Jump physics variables
+            jumpZ: 0,
+            jumpVel: 0,
+            isJumping: false
+        };
+
+        // Match the drawing buffer to its displayed size, including orientation changes.
+        function centerCamera() {
+            camera.x = Math.max(0, Math.min(MAP_WIDTH - camera.viewportWidth,
+                localPlayer.x + localPlayer.width / 2 - camera.viewportWidth / 2));
+            camera.y = Math.max(0, Math.min(MAP_HEIGHT - camera.viewportHeight,
+                localPlayer.y + localPlayer.height / 2 - camera.viewportHeight / 2));
+        }
+
+        function resizeCanvas() {
+            const bounds = canvas.getBoundingClientRect();
+            canvas.width = Math.max(1, Math.round(bounds.width));
+            canvas.height = Math.max(1, Math.round(bounds.height));
+            camera.zoom = bounds.width < 640 ? 0.85 : 1.35;
+            camera.viewportWidth = canvas.width / camera.zoom;
+            camera.viewportHeight = canvas.height / camera.zoom;
+            centerCamera();
+        }
+        new ResizeObserver(resizeCanvas).observe(canvas);
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        let obstacles = [];
+        let lakeAreas = [];
+        let chests = [];
+        let flowers = [];
+        let particles = [];
+
+        // Color Picker Logic
+        document.querySelectorAll('#color-picker-group button').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('#color-picker-group button').forEach(b => {
+                    b.classList.remove('scale-110', 'ring-2', 'ring-amber-400');
+                });
+                btn.classList.add('scale-110', 'ring-2', 'ring-amber-400');
+                playerColor = btn.getAttribute('data-color');
+            };
+        });
+
+        // --- GENERATE BEAUTIFUL LANDSCAPE & LAKES ---
+        function generateWorld() {
+            let seed = 20261110;
+            const worldRandom = () => {
+                seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+                return seed / 4294967296;
+            };
+            obstacles = [];
+            lakeAreas = [];
+            chests = [];
+            flowers = [];
+            particles = [];
+
+            const cols = MAP_WIDTH / TILE_SIZE;
+            const rows = MAP_HEIGHT / TILE_SIZE;
+
+            // 1. Lake / Water Bodies Definition (Animated Lakes)
+            lakeAreas.push({ x: 400, y: 300, radiusX: 260, radiusY: 180 });
+            lakeAreas.push({ x: 2500, y: 1800, radiusX: 320, radiusY: 220 });
+
+            lakeAreas.push({ x: 3900, y: 850, radiusX: 350, radiusY: 240 });
+            lakeAreas.push({ x: 1100, y: 2850, radiusX: 300, radiusY: 200 });
+
+            // Convert Lake areas to Obstacles so players can't walk into water
+            lakeAreas.forEach(lake => {
+                for (let x = lake.x - lake.radiusX; x <= lake.x + lake.radiusX; x += TILE_SIZE) {
+                    for (let y = lake.y - lake.radiusY; y <= lake.y + lake.radiusY; y += TILE_SIZE) {
+                        const dx = (x - lake.x) / lake.radiusX;
+                        const dy = (y - lake.y) / lake.radiusY;
+                        if (dx * dx + dy * dy <= 0.85) {
+                            obstacles.push({ x, y, width: TILE_SIZE, height: TILE_SIZE, type: 'water' });
+                        }
+                    }
+                }
+            });
+
+            // Outer Bounds (Forest Border)
+            for (let c = 0; c < cols; c++) {
+                obstacles.push({ x: c * TILE_SIZE, y: 0, width: TILE_SIZE, height: TILE_SIZE, type: 'tree' });
+                obstacles.push({ x: c * TILE_SIZE, y: (rows - 1) * TILE_SIZE, width: TILE_SIZE, height: TILE_SIZE, type: 'tree' });
+            }
+            for (let r = 1; r < rows - 1; r++) {
+                obstacles.push({ x: 0, y: r * TILE_SIZE, width: TILE_SIZE, height: TILE_SIZE, type: 'tree' });
+                obstacles.push({ x: (cols - 1) * TILE_SIZE, y: r * TILE_SIZE, width: TILE_SIZE, height: TILE_SIZE, type: 'tree' });
+            }
+
+            // Random Floating Leaves Ambient Particles
+            for (let i = 0; i < 40; i++) {
+                particles.push({
+                    x: worldRandom() * MAP_WIDTH,
+                    y: worldRandom() * MAP_HEIGHT,
+                    vx: worldRandom() * 0.4 - 0.2,
+                    vy: worldRandom() * 0.5 + 0.3,
+                    size: worldRandom() * 3 + 2,
+                    color: worldRandom() > 0.5 ? '#86efac' : '#fef08a'
+                });
+            }
+
+            // Decorative Flowers & Grass Knots
+            for (let i = 0; i < 560; i++) {
+                const fx = worldRandom() * (MAP_WIDTH - 200) + 100;
+                const fy = worldRandom() * (MAP_HEIGHT - 200) + 100;
+                if (!isPointInWater(fx, fy)) {
+                    flowers.push({
+                        x: fx,
+                        y: fy,
+                        color: ['#f472b6', '#fbbf24', '#a78bfa', '#38bdf8', '#f43f5e'][Math.floor(worldRandom() * 5)],
+                        size: worldRandom() * 4 + 3
+                    });
+                }
+            }
+
+            // Forest Clusters & Rocks
+            for (let i = 0; i < 135; i++) {
+                const rx = Math.floor(worldRandom() * (cols - 4) + 2);
+                const ry = Math.floor(worldRandom() * (rows - 4) + 2);
+                const px = rx * TILE_SIZE;
+                const py = ry * TILE_SIZE;
+
+                if (Math.abs(px - MAP_WIDTH / 2) > 200 || Math.abs(py - MAP_HEIGHT / 2) > 200) {
+                    if (!isPointInWater(px, py)) {
+                        obstacles.push({
+                            x: px,
+                            y: py,
+                            width: TILE_SIZE,
+                            height: TILE_SIZE,
+                            type: worldRandom() > 0.35 ? 'tree' : 'rock'
+                        });
+                    }
+                }
+            }
+
+            // Setiap soal mendapat satu peti di peta bersama.
+            const shuffledQuestions = [...QUESTION_BANK];
+            for (let i = shuffledQuestions.length - 1; i > 0; i--) {
+                const j = Math.floor(worldRandom() * (i + 1));
+                [shuffledQuestions[i], shuffledQuestions[j]] = [shuffledQuestions[j], shuffledQuestions[i]];
+            }
+            
+            for (let i = 0; i < QUESTION_BANK.length; i++) {
+                let validPos = false;
+                let cx = 0, cy = 0;
+                let attempts = 0;
+
+                // Cari lokasi acak yang tidak berada di dalam air / rintangan
+                while (!validPos && attempts < 100) {
+                    attempts++;
+                    cx = Math.floor(worldRandom() * (MAP_WIDTH - 300)) + 150;
+                    cy = Math.floor(worldRandom() * (MAP_HEIGHT - 300)) + 150;
+
+                    // Hindari spawn peti persis di tempat awal spawn pemain
+                    if (Math.abs(cx - MAP_WIDTH / 2) < 120 && Math.abs(cy - MAP_HEIGHT / 2) < 120) continue;
+
+                    // Pastikan tidak di air atau menabrak rintangan
+                    const testBox = { x: cx, y: cy, width: 36, height: 32 };
+                    const overlapsObs = obstacles.some(obs => checkCollision(testBox, obs));
+                    const inWater = isPointInWater(cx, cy);
+
+                    if (!overlapsObs && !inWater) {
+                        validPos = true;
+                    }
+                }
+
+                chests.push({
+                    id: i + 1,
+                    x: cx,
+                    y: cy,
+                    width: 36,
+                    height: 32,
+                    opened: false,
+                    question: shuffledQuestions[i % shuffledQuestions.length]
+                });
+            }
+        }
+
+        function isPointInWater(x, y) {
+            return lakeAreas.some(lake => {
+                const dx = (x - lake.x) / lake.radiusX;
+                const dy = (y - lake.y) / lake.radiusY;
+                return (dx * dx + dy * dy) <= 1.0;
+            });
+        }
+
+        // Canvas Responsive Resize
+        // Trigger Jump Function
+        function performJump() {
+            if (!gameRunning || isLocked || localPlayer.isJumping) return;
+            localPlayer.isJumping = true;
+            localPlayer.jumpVel = 9.5;
+            AudioFX.jump();
+        }
+
+        // Keyboard Controls
+        window.addEventListener('keydown', (e) => {
+            if (isLocked) return;
+            if (e.code === 'Space') {
+                e.preventDefault();
+                performJump();
+                return;
+            }
+            switch(e.key) {
+                case 'ArrowUp': case 'w': case 'W': keys.Up = true; break;
+                case 'ArrowDown': case 's': case 'S': keys.Down = true; break;
+                case 'ArrowLeft': case 'a': case 'A': keys.Left = true; break;
+                case 'ArrowRight': case 'd': case 'D': keys.Right = true; break;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            switch(e.key) {
+                case 'ArrowUp': case 'w': case 'W': keys.Up = false; break;
+                case 'ArrowDown': case 's': case 'S': keys.Down = false; break;
+                case 'ArrowLeft': case 'a': case 'A': keys.Left = false; break;
+                case 'ArrowRight': case 'd': case 'D': keys.Right = false; break;
+            }
+        });
+
+        // Touch Control Binds
+        const bindTouch = (id, key) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            const start = (e) => { e.preventDefault(); if (!isLocked) keys[key] = true; };
+            const end = (e) => { e.preventDefault(); keys[key] = false; };
+            btn.addEventListener('touchstart', start);
+            btn.addEventListener('touchend', end);
+            btn.addEventListener('touchcancel', end);
+            btn.addEventListener('mouseleave', end);
+            btn.addEventListener('mousedown', start);
+            btn.addEventListener('mouseup', end);
+        };
+        bindTouch('btn-up', 'Up');
+        bindTouch('btn-down', 'Down');
+        bindTouch('btn-left', 'Left');
+        bindTouch('btn-right', 'Right');
+
+        // Bind Jump Button Touch
+        const btnJump = document.getElementById('btn-jump');
+        if (btnJump) {
+            btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); performJump(); });
+            btnJump.addEventListener('mousedown', (e) => { e.preventDefault(); performJump(); });
+        }
+
+        function checkCollision(r1, r2) {
+            return r1.x < r2.x + r2.width &&
+                   r1.x + r1.width > r2.x &&
+                   r1.y < r2.y + r2.height &&
+                   r1.y + r1.height > r2.y;
+        }
+
+        function findSafeSpawn(preferredX, preferredY) {
+            const clearance = 20;
+            const candidates = [];
+            for (let y = TILE_SIZE; y < MAP_HEIGHT - TILE_SIZE; y += TILE_SIZE) {
+                for (let x = TILE_SIZE; x < MAP_WIDTH - TILE_SIZE; x += TILE_SIZE) {
+                    candidates.push({ x, y });
+                }
+            }
+            candidates.unshift({ x: preferredX, y: preferredY });
+            candidates.sort((a, b) =>
+                Math.hypot(a.x - preferredX, a.y - preferredY) -
+                Math.hypot(b.x - preferredX, b.y - preferredY));
+
+            return candidates.find(({ x, y }) => {
+                const box = {
+                    x: x - clearance, y: y - clearance,
+                    width: localPlayer.width + clearance * 2,
+                    height: localPlayer.height + clearance * 2
+                };
+                if (box.x < 0 || box.y < 0 || box.x + box.width > MAP_WIDTH ||
+                    box.y + box.height > MAP_HEIGHT) return false;
+                if (obstacles.some(obs => checkCollision(box, obs)) ||
+                    chests.some(chest => checkCollision(box, chest))) return false;
+                return !lakeAreas.some(lake => {
+                    const closestX = Math.max(box.x, Math.min(lake.x, box.x + box.width));
+                    const closestY = Math.max(box.y, Math.min(lake.y, box.y + box.height));
+                    return ((closestX - lake.x) / lake.radiusX) ** 2 +
+                        ((closestY - lake.y) / lake.radiusY) ** 2 <= 1;
+                });
+            });
+        }
+
+        // Move Player & Sync Firebase
+        function update() {
+            if (!gameRunning || isLocked) return;
+
+            // Handle Jump Gravity Physics
+            if (localPlayer.isJumping) {
+                localPlayer.jumpZ += localPlayer.jumpVel;
+                localPlayer.jumpVel -= 0.65; // Gravity
+                if (localPlayer.jumpZ <= 0) {
+                    localPlayer.jumpZ = 0;
+                    localPlayer.jumpVel = 0;
+                    localPlayer.isJumping = false;
+                }
+            }
+
+            let moveX = 0;
+            let moveY = 0;
+
+            if (keys.Up) moveY -= 1;
+            if (keys.Down) moveY += 1;
+            if (keys.Left) moveX -= 1;
+            if (keys.Right) moveX += 1;
+
+            if (moveX !== 0 && moveY !== 0) {
+                moveX *= 0.7071;
+                moveY *= 0.7071;
+            }
+
+            if (moveX !== 0 || moveY !== 0) {
+                localPlayer.dirX = moveX;
+                localPlayer.dirY = moveY;
+                localPlayer.animTimer++;
+                if (localPlayer.animTimer % 6 === 0) {
+                    localPlayer.animFrame = (localPlayer.animFrame + 1) % 4;
+                }
+            }
+
+            let nextX = localPlayer.x + moveX * localPlayer.speed;
+            let nextY = localPlayer.y + moveY * localPlayer.speed;
+
+            const boxX = { x: nextX, y: localPlayer.y, width: localPlayer.width, height: localPlayer.height };
+            const boxY = { x: localPlayer.x, y: nextY, width: localPlayer.width, height: localPlayer.height };
+
+            let collideX = false, collideY = false;
+            for (let obs of obstacles) {
+                if (checkCollision(boxX, obs)) collideX = true;
+                if (checkCollision(boxY, obs)) collideY = true;
+            }
+
+            if (!collideX) localPlayer.x = nextX;
+            if (!collideY) localPlayer.y = nextY;
+
+            // Update Floating Particles
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                if (p.y > MAP_HEIGHT) p.y = 0;
+                if (p.x > MAP_WIDTH) p.x = 0;
+                if (p.x < 0) p.x = MAP_WIDTH;
+            });
+
+            // Camera Smooth Follow
+            const targetCamX = localPlayer.x + localPlayer.width / 2 - camera.viewportWidth / 2;
+            const targetCamY = localPlayer.y + localPlayer.height / 2 - camera.viewportHeight / 2;
+
+            camera.x += (targetCamX - camera.x) * 0.1;
+            camera.y += (targetCamY - camera.y) * 0.1;
+            camera.x = Math.max(0, Math.min(MAP_WIDTH - camera.viewportWidth, camera.x));
+            camera.y = Math.max(0, Math.min(MAP_HEIGHT - camera.viewportHeight, camera.y));
+            // Chest Collisions (Hanya jika tidak sedang melompat terlalu tinggi)
+            if (localPlayer.jumpZ < 15) {
+                const playerBox = { x: localPlayer.x, y: localPlayer.y, width: localPlayer.width, height: localPlayer.height };
+                for (let chest of chests) {
+                    if (!chest.opened && checkCollision(playerBox, chest)) {
+                        openQuizModal(chest);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Open Quiz Modal
+        function openQuizModal(chest) {
+            isLocked = true;
+            activeChest = chest;
+            Object.keys(keys).forEach(k => keys[k] = false);
+
+            AudioFX.chestOpen();
+
+            document.getElementById('lock-warning').classList.remove('hidden');
+            const modal = document.getElementById('quiz-modal');
+            const qText = document.getElementById('quiz-question');
+            const optionsDiv = document.getElementById('quiz-options');
+            const rewardText = document.getElementById('quiz-reward');
+            const feedback = document.getElementById('quiz-feedback');
+
+            feedback.classList.add('hidden');
+            qText.textContent = `Peti ${chest.id}: ${chest.question.q}`;
+            rewardText.textContent = `+${chest.question.points} Poin`;
+            optionsDiv.innerHTML = '';
+
+            chest.question.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left p-3 rounded-xl bg-slate-800/90 hover:bg-amber-500/40 border border-slate-700 hover:border-amber-400 text-slate-100 text-xs sm:text-sm font-semibold transition-all flex items-center justify-between group shadow";
+                btn.innerHTML = `
+                    <span>${String.fromCharCode(65 + idx)}. ${opt}</span>
+                    <i class="fa-solid fa-circle-check opacity-0 group-hover:opacity-100 text-amber-400 transition-opacity"></i>
+                `;
+                btn.onclick = () => submitAnswer(idx);
+                optionsDiv.appendChild(btn);
+            });
+
+            modal.classList.remove('hidden');
+        }
+
+        // Answer Submission
+        function submitAnswer(selectedIndex) {
+            if (!activeChest || activeChest.opened) return;
+
+            const q = activeChest.question;
+            const feedback = document.getElementById('quiz-feedback');
+            const buttons = document.getElementById('quiz-options').children;
+
+            for (let b of buttons) {
+                b.disabled = true;
+                b.classList.add('opacity-60', 'cursor-not-allowed');
+            }
+
+            if (selectedIndex === q.answer) {
+                AudioFX.correct();
+                answerScore += q.points;
+                activeChest.opened = true;
+                feedback.className = "p-3 rounded-xl text-center text-xs font-bold bg-emerald-500/40 text-emerald-300 border border-emerald-500/40";
+                feedback.innerHTML = `<i class="fa-solid fa-star text-amber-400 mr-1.5"></i> JAWABAN BENAR! (+${q.points} POIN)`;
+            } else {
+                AudioFX.wrong();
+                answerScore = Math.max(0, answerScore - 15);
+                activeChest.opened = true;
+                feedback.className = "p-3 rounded-xl text-center text-xs font-bold bg-rose-500/40 text-rose-300 border border-rose-500/40";
+                feedback.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Kurang Tepat! Jawaban yang benar: <b>${q.options[q.answer]}</b>`;
+            }
+
+            feedback.classList.remove('hidden');
+            updateTimedScore();
+            updateHUD();
+            if (chests.every(c => c.opened)) {
+                clearInterval(timerInterval);
+            }
+
+            setTimeout(() => {
+                document.getElementById('quiz-modal').classList.add('hidden');
+                document.getElementById('lock-warning').classList.add('hidden');
+                isLocked = false;
+                activeChest = null;
+
+                const remaining = chests.filter(c => !c.opened).length;
+                if (remaining === 0) {
+                    finishGame();
+                }
+            }, 1600);
+        }
+
+        // Dynamic Fine Graphics & Landscape Rendering
+        function render() {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Camera Transformation
+            ctx.scale(camera.zoom, camera.zoom);
+            ctx.translate(-camera.x, -camera.y);
+
+            // 1. Grass Base
+            ctx.fillStyle = '#15803d';
+            ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+
+            // Ground Dirt Paths/Grids
+            ctx.strokeStyle = 'rgba(22, 101, 52, 0.35)';
+            ctx.lineWidth = 2;
+            for (let x = 0; x < MAP_WIDTH; x += TILE_SIZE * 2) {
+                for (let y = 0; y < MAP_HEIGHT; y += TILE_SIZE * 2) {
+                    ctx.strokeRect(x, y, TILE_SIZE * 2, TILE_SIZE * 2);
+                }
+            }
+
+            // 2. Animated Water Lakes & Ripples
+            const time = Date.now() * 0.002;
+            lakeAreas.forEach(lake => {
+                // Shoreline / Sandy edge
+                ctx.fillStyle = '#fde047';
+                ctx.beginPath();
+                ctx.ellipse(lake.x, lake.y, lake.radiusX + 12, lake.radiusY + 12, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Shallow Water
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.ellipse(lake.x, lake.y, lake.radiusX, lake.radiusY, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Deep Water Core
+                ctx.fillStyle = '#0284c7';
+                ctx.beginPath();
+                ctx.ellipse(lake.x, lake.y, lake.radiusX * 0.75, lake.radiusY * 0.75, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Animated Water Ripples (Shimmer Lines)
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.lineWidth = 3;
+                for (let r = 20; r < lake.radiusX * 0.8; r += 45) {
+                    const waveR = r + Math.sin(time + r) * 6;
+                    ctx.beginPath();
+                    ctx.ellipse(lake.x, lake.y, waveR, waveR * (lake.radiusY / lake.radiusX), 0, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            });
+
+            // Decorative Flowers
+            flowers.forEach(f => {
+                ctx.fillStyle = f.color;
+                ctx.beginPath();
+                ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw Obstacles (Trees & Rocks)
+            obstacles.forEach(obs => {
+                if (obs.type === 'tree') {
+                    // Tree Shadow
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                    ctx.beginPath();
+                    ctx.ellipse(obs.x + 25, obs.y + 42, 22, 10, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Trunk
+                    ctx.fillStyle = '#78350f';
+                    ctx.fillRect(obs.x + 18, obs.y + 24, 14, 22);
+                    // Foliage Layers
+                    ctx.fillStyle = '#166534';
+                    ctx.beginPath(); ctx.arc(obs.x + 25, obs.y + 18, 22, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#22c55e';
+                    ctx.beginPath(); ctx.arc(obs.x + 20, obs.y + 14, 15, 0, Math.PI * 2); ctx.fill();
+                } else if (obs.type === 'rock') {
+                    // Rock 3D
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.beginPath(); ctx.ellipse(obs.x + 25, obs.y + 40, 20, 8, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#475569';
+                    ctx.beginPath(); ctx.roundRect(obs.x + 6, obs.y + 12, 38, 30, 10); ctx.fill();
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.beginPath(); ctx.arc(obs.x + 20, obs.y + 24, 10, 0, Math.PI * 2); ctx.fill();
+                }
+            });
+
+            // Draw Chests
+            chests.forEach(c => {
+                if (!c.opened) {
+                    const glowPulse = Math.sin(Date.now() / 250) * 4;
+                    ctx.fillStyle = 'rgba(251, 191, 36, 0.35)';
+                    ctx.beginPath();
+                    ctx.arc(c.x + 18, c.y + 16, 24 + glowPulse, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#78350f';
+                    ctx.fillRect(c.x, c.y + 6, c.width, c.height - 6);
+                    ctx.fillStyle = '#d97706';
+                    ctx.fillRect(c.x + 2, c.y + 2, c.width - 4, 12);
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.fillRect(c.x + 4, c.y + 2, 4, c.height - 2);
+                    ctx.fillRect(c.x + c.width - 8, c.y + 2, 4, c.height - 2);
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(c.x + 14, c.y + 14, 8, 9);
+                } else {
+                    ctx.fillStyle = '#451a03';
+                    ctx.fillRect(c.x, c.y + 10, c.width, c.height - 10);
+                    ctx.fillStyle = '#78350f';
+                    ctx.fillRect(c.x - 2, c.y + 4, c.width + 4, 8);
+                }
+            });
+
+            // Floating Environmental Particles
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Render Remote Multiplayer Players (with Jump Heights synced)
+            Object.keys(remotePlayers).forEach(uid => {
+                if (uid !== myUserId) {
+                    const rPlayer = remotePlayers[uid];
+                    drawCharacter(
+                        rPlayer.x, 
+                        rPlayer.y, 
+                        rPlayer.jumpZ || 0, 
+                        rPlayer.color || '#dc2626', 
+                        rPlayer.name || 'Pemain', 
+                        rPlayer.dirX || 0
+                    );
+                }
+            });
+
+            // Render Local Player
+            drawCharacter(
+                localPlayer.x, 
+                localPlayer.y, 
+                localPlayer.jumpZ, 
+                playerColor, 
+                playerName, 
+                localPlayer.dirX
+            );
+
+            ctx.restore();
+
+            // Render Mini-Map Radar UI
+            renderMiniMap();
+        }
+
+        // Generic Character Drawer Function with Dynamic Jump Offset & Dynamic Shadow
+        function drawCharacter(x, y, jumpZ, color, name, dirX) {
+            const shadowScale = Math.max(0.3, 1 - (jumpZ / 60));
+            const renderY = y - jumpZ;
+
+            // Dynamic Drop Shadow (Sinks/Shrinks when jumping high)
+            ctx.fillStyle = `rgba(0, 0, 0, ${0.35 * shadowScale})`;
+            ctx.beginPath();
+            ctx.ellipse(x + 16, y + 36, 14 * shadowScale, 7 * shadowScale, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Body Tunic
+            ctx.fillStyle = color;
+            ctx.beginPath(); ctx.roundRect(x + 4, renderY + 14, 24, 18, 6); ctx.fill();
+
+            // Belt
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(x + 4, renderY + 24, 24, 4);
+
+            // Skin Head
+            ctx.fillStyle = '#fed7aa';
+            ctx.beginPath(); ctx.arc(x + 16, renderY + 11, 10, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#b45309';
+            ctx.beginPath(); ctx.arc(x + 16, renderY + 7, 10, Math.PI, Math.PI * 2); ctx.fill();
+
+            // Eyes Direction
+            ctx.fillStyle = '#0f172a';
+            if (dirX >= 0) ctx.fillRect(x + 18, renderY + 10, 3, 3);
+            if (dirX <= 0) ctx.fillRect(x + 11, renderY + 10, 3, 3);
+
+            // Backpack
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath(); ctx.roundRect(x - 1, renderY + 16, 6, 12, 3); ctx.fill();
+
+            // Name Tag Floating Above Player
+            ctx.font = 'bold 11px Fredoka, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+            const textWidth = ctx.measureText(name).width;
+            ctx.fillRect(x + 16 - textWidth/2 - 4, renderY - 14, textWidth + 8, 14);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(name, x + 16, renderY - 3);
+        }
+
+        // Render Mini-Map
+        function renderMiniMap() {
+            const mmSize = Math.min(120, Math.round(canvas.width * 0.23));
+            const padding = 15;
+            const mmX = canvas.width - mmSize - padding;
+            const mmY = canvas.height - mmSize - padding;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(mmX, mmY, mmSize, mmSize, 12);
+            ctx.fill();
+            ctx.stroke();
+
+            const scaleX = mmSize / MAP_WIDTH;
+            const scaleY = mmSize / MAP_HEIGHT;
+
+            // Render Lakes on Mini-Map
+            ctx.fillStyle = '#38bdf8';
+            lakeAreas.forEach(lake => {
+                ctx.beginPath();
+                ctx.ellipse(mmX + lake.x * scaleX, mmY + lake.y * scaleY, lake.radiusX * scaleX, lake.radiusY * scaleY, 0, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Chest Dots
+            chests.forEach(c => {
+                ctx.fillStyle = c.opened ? '#475569' : '#fbbf24';
+                ctx.beginPath();
+                ctx.arc(mmX + c.x * scaleX, mmY + c.y * scaleY, c.opened ? 1.5 : 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Remote Players Green Dots
+            Object.keys(remotePlayers).forEach(uid => {
+                if (uid !== myUserId) {
+                    const rp = remotePlayers[uid];
+                    ctx.fillStyle = '#22c55e';
+                    ctx.beginPath();
+                    ctx.arc(mmX + rp.x * scaleX, mmY + rp.y * scaleY, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // Local Player Bright Red Dot
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(mmX + localPlayer.x * scaleX, mmY + localPlayer.y * scaleY, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // Main Animation Loop
+        function loop() {
+            update();
+            render();
+            requestAnimationFrame(loop);
+        }
+
+        // Update HUD Elements
+        function updateHUD() {
+            document.getElementById('hud-score').textContent = score;
+            const openedCount = chests.filter(c => c.opened).length;
+            document.getElementById('hud-chests').textContent = `${openedCount}/${QUESTION_BANK.length}`;
+        }
+
+        // Ten minutes gives a 50% multiplier; there is no time limit.
+        function calculateFinalScore(points, seconds) {
+            return Math.round(points * 600 / (600 + Math.max(0, seconds)));
+        }
+
+        function updateTimedScore() {
+            elapsedTime = Math.max(0, (performance.now() - startTime) / 1000);
+            score = calculateFinalScore(answerScore, elapsedTime);
+            const wholeSeconds = Math.floor(elapsedTime);
+            const mins = String(Math.floor(wholeSeconds / 60)).padStart(2, '0');
+            const secs = String(wholeSeconds % 60).padStart(2, '0');
+            document.getElementById('hud-timer').textContent = `${mins}:${secs}`;
+        }
+
+        function startTimer() {
+            startTime = performance.now();
+            clearInterval(timerInterval);
+            updateTimedScore();
+            timerInterval = setInterval(() => {
+                if (!gameRunning) return;
+                updateTimedScore();
+                updateHUD();
+            }, 250);
+        }
+
+        function escapeHtml(value) {
+            const element = document.createElement('span');
+            element.textContent = value;
+            return element.innerHTML;
+        }
+
+        // Render Leaderboard Content
+        function renderLeaderboard(playersData) {
+            const listEl = document.getElementById('leaderboard-list');
+            if (!listEl) return;
+
+            const sorted = Object.values(playersData)
+                .filter(p => p && p.name)
+                .sort((a, b) => (b.score || 0) - (a.score || 0))
+                .slice(0, 5);
+
+            if (sorted.length === 0) {
+                listEl.innerHTML = `<div class="text-slate-500 italic text-[11px]">Belum ada skor tercatat.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = sorted.map((p, idx) => `
+                <div class="flex items-center justify-between py-1 border-b border-slate-800/80 last:border-none">
+                    <span class="font-semibold text-slate-200">
+                        <span class="text-amber-400 font-bold mr-1">#${idx + 1}</span> ${escapeHtml(p.name)}
+                    </span>
+                    <span class="font-pixel text-amber-300 font-bold">${p.score || 0} pts</span>
+                </div>
+            `).join('');
+        }
+
+        function currentPlayerState() {
+            return {
+                name: playerName, color: playerColor, score,
+                x: Math.round(localPlayer.x), y: Math.round(localPlayer.y),
+                jumpZ: Math.max(0, Math.round(localPlayer.jumpZ)), dirX: localPlayer.dirX
+            };
+        }
+
+        async function syncMultiplayer() {
+            if (!multiplayerActive || multiplayerBusy) return;
+            multiplayerBusy = true;
+            try {
+                const response = await fetch('/.netlify/functions/players', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Player-Session': playerSession },
+                    body: JSON.stringify(currentPlayerState()),
+                    signal: AbortSignal.timeout(8000), cache: 'no-store'
+                });
+                if (!response.ok) throw new Error('Connection unavailable');
+                const data = await response.json();
+                myUserId = data.id;
+                remotePlayers = Object.fromEntries(data.players.map(p => [p.id, p]));
+                lastMultiplayerSuccess = Date.now();
+                document.getElementById('hud-online').textContent = data.players.length;
+                document.getElementById('multiplayer-status').textContent =
+                    `Terhubung • ${data.players.length} pemain online. Teman yang mulai di situs ini masuk ke peta yang sama.`;
+                renderLeaderboard(remotePlayers);
+            } catch {
+                document.getElementById('multiplayer-status').textContent =
+                    'Koneksi multiplayer terputus. Mencoba menghubungkan kembali…';
+                if (Date.now() - lastMultiplayerSuccess > 15000) {
+                    remotePlayers = {};
+                    document.getElementById('hud-online').textContent = '—';
+                    renderLeaderboard({ self: currentPlayerState() });
+                }
+            } finally {
+                multiplayerBusy = false;
+                if (multiplayerActive) multiplayerTimer = setTimeout(syncMultiplayer, 800);
+            }
+        }
+
+        window.addEventListener('pagehide', () => {
+            multiplayerActive = false;
+            clearTimeout(multiplayerTimer);
+            fetch('/.netlify/functions/players', {
+                method: 'DELETE', headers: { 'X-Player-Session': playerSession }, keepalive: true
+            }).catch(() => {});
+        });
+        window.addEventListener('pageshow', (event) => {
+            if (event.persisted && myUserId) {
+                multiplayerActive = true;
+                syncMultiplayer();
+            }
+        });
+
+        function startGame() {
+            const inputVal = document.getElementById('player-name-input').value.trim();
+            playerName = inputVal || "Teman Kecil";
+
+            score = 0;
+            answerScore = 0;
+            elapsedTime = 0;
+            isLocked = false;
+            activeChest = null;
+
+            generateWorld();
+            // Validate arrivals against the generated world, including the full lake shoreline.
+            const spawn = findSafeSpawn(
+                MAP_WIDTH / 2 - 80 + parseInt(playerSession.slice(0, 2), 16) % 160,
+                MAP_HEIGHT / 2 - 80 + parseInt(playerSession.slice(2, 4), 16) % 160
+            );
+            if (!spawn) return;
+            localPlayer.x = spawn.x;
+            localPlayer.y = spawn.y;
+            localPlayer.jumpZ = 0;
+            localPlayer.jumpVel = 0;
+            localPlayer.isJumping = false;
+            centerCamera();
+
+            startTimer();
+            updateHUD();
+
+            document.getElementById('overlay-start').classList.add('hidden');
+            document.getElementById('overlay-end').classList.add('hidden');
+            document.getElementById('quiz-modal').classList.add('hidden');
+            document.getElementById('lock-warning').classList.add('hidden');
+
+            gameRunning = true;
+            if (!multiplayerActive) {
+                multiplayerActive = true;
+                document.getElementById('multiplayer-status').textContent = 'Menghubungkan ke pemain lain…';
+                syncMultiplayer();
+            }
+        }
+
+        function finishGame() {
+            gameRunning = false;
+            clearInterval(timerInterval);
+            AudioFX.victory();
+
+            const mins = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
+            const secs = String(Math.floor(elapsedTime % 60)).padStart(2, '0');
+
+            document.getElementById('end-score').textContent = score;
+            document.getElementById('end-time').textContent = `${mins}:${secs}`;
+            document.getElementById('end-breakdown').textContent =
+                `Skor jawaban ${answerScore} × pengali waktu ${(600 / (600 + elapsedTime)).toFixed(3)} = ${score} poin. Makin cepat selesai, makin besar pengalinya.`;
+            renderLeaderboard({ ...remotePlayers, [myUserId || 'self']: currentPlayerState() });
+
+            document.getElementById('overlay-end').classList.remove('hidden');
+        }
+
+        // Event Listeners
+        document.getElementById('btn-start').onclick = startGame;
+        document.getElementById('btn-play-again').onclick = startGame;
+        document.getElementById('btn-restart').onclick = () => {
+            if (confirm("Ingin mengulang petualangan dari awal?")) {
+                startGame();
+            }
+        };
+
+        window.onload = () => {
+            loop();
+        };
+    </script>
+</body>
+</html>
